@@ -1,16 +1,28 @@
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+using System.Threading;
+using System.Collections;
+using NUnit.Framework.Interfaces;
+
 
 public class movePlayer : MonoBehaviour
 {
-    [SerializeField] float speed;
+    [SerializeField] GameObject effect;
+    [SerializeField] float DashTime, speedDash, speed;
     [SerializeField] float jump;
-    float x;
+    [SerializeField] Attack _attack;
+    [SerializeField] LayerMask ground;
+    [SerializeField] Transform GroundCheck;
+    [SerializeField] Slider energy_bar, HP_bar, Dash_bar;
+    [SerializeField] Animator transition;
+    float x, energy = 3, _HP = 100, dashTimer = 0, DashCoolDown = 2, RunTime = 0;
     Rigidbody2D rb;
     Animator ani;
     SpriteRenderer flip;
     bool isGrounded;
-    bool DoubleJump;
-    // bool canDash = false;
+    bool DoubleJump, canDash = false, died = false;
+
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -23,51 +35,67 @@ public class movePlayer : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (died) return;
+        isGrounded = Physics2D.OverlapCircle(GroundCheck.position, 0.2f, ground);
         x = Input.GetAxis("Horizontal");
         rb.linearVelocity = new Vector2(x * speed, rb.linearVelocity.y);
         Flip();
         Jump();
-        // Dash();
         UpdateAnimation();
+
+        //Tấn công
+        if (energy <= 3)
+            energy += Time.deltaTime;
+        if (energy >= 1)
+        {
+            attack();
+        }
+
+
+        //Dash
+        if (DashCoolDown < 2) DashCoolDown += Time.deltaTime;
+        if (DashCoolDown >= 2)
+        {
+            Dash();
+        }
+        //Update UI
+        energy_bar.value = energy;
+        HP_bar.value = _HP;
+        Dash_bar.value = DashCoolDown;
+
+        //SFX
+        Run_SFX();
+
     }
+
+    void Run_SFX()
+    {
+        if (x != 0 && isGrounded)
+        {
+            RunTime += Time.deltaTime;
+            if (RunTime >= 0.2)
+            {
+                SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Run);
+                RunTime = 0;
+            }
+        }
+    }
+
     void Jump()
     {
         if (Input.GetKeyDown(KeyCode.W) && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jump);
             DoubleJump = true;
+            SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Jump);
         }
         else if (Input.GetKeyDown(KeyCode.W) && DoubleJump)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jump);
             DoubleJump = false;
+            SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Jump);
         }
     }
-    // void Dash()
-    // {
-    //     if (Input.GetKeyDown(KeyCode.W) && isGrounded)
-    //     {
-    //         canDash = true;
-    //         ani.SetBool("dash", false);
-
-    //     }
-    //     else if (Input.GetKeyDown(KeyCode.Space) && canDash && !isGrounded)
-    //     {
-    //         if (flip.flipX)
-    //         {
-    //             this.transform.position = new Vector2(this.transform.position.x - 2, this.transform.position.y);
-    //         }
-    //         else
-    //         {
-    //             this.transform.position = new Vector2(this.transform.position.x + 2, this.transform.position.y);
-
-    //         }
-    //         ani.SetBool("dash", true);
-    //         canDash = false;
-    //     }
-    //     else ani.SetBool("dash", false);
-    // }
-
     void Flip()
     {
         if (x > 0)
@@ -83,33 +111,84 @@ public class movePlayer : MonoBehaviour
     {
         bool running = x != 0;
         bool jumping = !isGrounded;
-        bool attack = Input.GetKey(KeyCode.J);
-        if (attack)
-        {
-            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            running = false;
-            jumping = false;
-        }
         ani.SetBool("run", running);
         ani.SetBool("jump", jumping);
-        ani.SetBool("attack", attack);
-
     }
 
-    public void OnTriggerEnter2D(Collider2D col)
+    void attack()
     {
-        if (col.CompareTag("ground"))
+        if (Input.GetKeyDown(KeyCode.J))
         {
-            isGrounded = true;
+            _attack.attack();
+            ani.SetTrigger("attack");
+            SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Attack);
+            energy--;
         }
-        Debug.Log(isGrounded);
     }
 
-    public void OnTriggerExit2D(Collider2D col)
+    public void GetHit(float dame)
     {
-        if (col.CompareTag("ground"))
+        if (died) return;
+        _HP -= dame;
+
+        if (_HP <= 0)
         {
-            isGrounded = false;
+            HP_bar.value = _HP;
+            died = true;
+            StartCoroutine(Die());
+        }
+        else
+        {
+            ani.SetTrigger("gethit");
+            SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Gethit);
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, 10);
+        }
+
+
+    }
+    IEnumerator Die()
+    {
+        ani.SetTrigger("die");
+        SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Die);
+        yield return new WaitForSeconds(1);
+        transition.SetTrigger("end");
+        SoundManager.instance.PlaySFX(SoundManager.instance.transition);
+        yield return new WaitForSeconds(2);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+
+    public void GetHP(float hp)
+    {
+        _HP += hp;
+        if (_HP > 100) _HP = 100;
+    }
+
+    void Dash()
+    {
+        float dirDash = (flip.flipX == false) ? 1 : -1;
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            canDash = true;
+            SoundManager.instance.PlaySFX(SoundManager.instance.audioClipSFX_Dash);
+        }
+        ani.SetTrigger("dash");
+        if (canDash && dashTimer < DashTime)
+        {
+            dashTimer += Time.deltaTime;
+            rb.linearVelocity = new Vector2(speedDash * dirDash, rb.linearVelocity.y);
+            rb.constraints = RigidbodyConstraints2D.FreezePositionY | RigidbodyConstraints2D.FreezeRotation;
+            GameObject _effect = Instantiate(effect, transform.position, Quaternion.identity);
+            _effect.transform.rotation = (dirDash == 1) ? Quaternion.Euler(0, 0, 0) : Quaternion.Euler(0, 180, 0);
+            Destroy(_effect, 0.1f);
+        }
+        if (dashTimer >= DashTime)
+        {
+            canDash = false;
+            dashTimer = 0;
+            DashCoolDown = 0;
+            rb.constraints = RigidbodyConstraints2D.None;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
         }
     }
 }
