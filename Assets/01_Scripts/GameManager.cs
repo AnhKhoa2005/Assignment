@@ -27,7 +27,7 @@ public class GameManager : MonoBehaviour
     void Start()
     {
 
-
+        Application.targetFrameRate = 60;
         if (ShowMainMenu != null || ShowSetting != null)
         {
             ShowMainMenu.SetActive(true);
