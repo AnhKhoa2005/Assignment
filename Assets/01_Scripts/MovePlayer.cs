@@ -199,7 +199,7 @@ public class movePlayer : MonoBehaviour
         if (canDash && dashTimer < DashTime)
         {
             dashTimer += Time.deltaTime;
-            rb.linearVelocity = new Vector2(speedDash * dirDash, rb.linearVelocity.y);
+            rb.linearVelocity = new Vector2(10, rb.linearVelocity.y);
             rb.constraints = RigidbodyConstraints2D.FreezePositionY | RigidbodyConstraints2D.FreezeRotation;
             GameObject _effect = Instantiate(effect, transform.position, Quaternion.identity);
             _effect.transform.rotation = (dirDash == 1) ? Quaternion.Euler(0, 0, 0) : Quaternion.Euler(0, 180, 0);
